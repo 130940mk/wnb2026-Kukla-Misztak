@@ -1,0 +1,7 @@
+name: edirect-env
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - entrez-direct
