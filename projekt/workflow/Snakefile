@@ -101,3 +101,76 @@ rule najlepsze_trafienie:
     shell:
         "LC_ALL=C sort -k1,1 -k12,12gr {input} "
         "| awk -F'\\t' '!widziane[$1]++' > {output}"
+# --- Etap 6: konwersja macierzy DArT na genotypy ---
+rule genotypy:
+    input:
+        csv = config["dart_csv"],
+        awk = "workflow/scripts/genotypy.awk"
+    output:
+        f"{OUT}/03_variant/dart_genotypes.tsv"
+    params:
+        hdr = config["dart_header_row"],
+        first = config["dart_data_start_row"],
+        col = config["dart_genotype_start_col"]
+    shell:
+        "awk -v header_row={params.hdr} -v data_start={params.first} "
+        "-v sample_col={params.col} -f {input.awk} {input.csv} > {output}"
+# --- Etap 7: 
+
+rule zlacz_genotypy: złączenie, sortowanie i zapis VCF ---
+    input:
+        gt = f"{OUT}/03_variant/dart_genotypes.tsv",
+        core = f"{OUT}/03_variant/step2_core_rc.tsv",
+        awk = "workflow/scripts/zlacz_genotypy.awk"
+    output:
+        f"{OUT}/03_variant/step3_with_genotypes.tsv"
+    shell:
+        "awk -f {input.awk} {input.gt} {input.core} > {output}"
+
+rule sortuj:
+    input:
+        f"{OUT}/03_variant/step3_with_genotypes.tsv"
+    output:
+        f"{OUT}/03_variant/step3_sorted.tsv"
+    shell:
+        """
+        ( head -n 1 {input}
+          tail -n +2 {input} | LC_ALL=C sort -t $'\\t' -k1,1 -k2,2n
+        ) > {output}
+        """
+
+rule zapisz_vcf:
+    input:
+        tsv = f"{OUT}/03_variant/step3_sorted.tsv",
+        awk = "workflow/scripts/zapisz_vcf.awk"
+    output:
+        f"{OUT}/04_vcf/final.vcf"
+    shell:
+        "awk -f {input.awk} {input.tsv} > {output}"
+
+* --- Etap 8: walidacja i raport ---
+
+rule waliduj:
+    input:
+        vcf = f"{OUT}/04_vcf/final.vcf",
+        genome = config["genome_fasta"],
+        probes = f"{OUT}/01_extract/probes.fa",
+        blast_raw = f"{OUT}/02_blast/blast_raw.tsv",
+        blast_filtered = f"{OUT}/02_blast/blast_filtered.tsv",
+        blast_best = f"{OUT}/02_blast/blast_best.tsv",
+        script = "workflow/scripts/waliduj.sh"
+    output:
+        stat = report(f"{config['report_dir']}/statystyki.md",
+                      caption="captions/statystyki.rst", category="Wyniki"),
+        wal = report(f"{config['report_dir']}/walidacja.md",
+                     caption="captions/walidacja.rst", category="Wyniki")
+    params:
+        min_cons = config["min_consistency"]
+    conda:
+        "envs/vcf.yaml"
+    log:
+        "logs/waliduj.log"
+    shell:
+        "bash {input.script} {input.vcf} {input.genome} {input.probes} "
+        "{input.blast_raw} {input.blast_filtered} {input.blast_best} "
+        "{output.stat} {output.wal} {params.min_cons} 2> {log}"
