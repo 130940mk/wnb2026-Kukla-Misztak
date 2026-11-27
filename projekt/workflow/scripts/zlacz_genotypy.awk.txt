@@ -1,0 +1,19 @@
+BEGIN { FS = OFS = "\t" }
+
+NR == FNR {
+    if (FNR == 1) { h = $0; next }
+    id = $1
+    $1 = ""
+    sub(/^\t/, "", $0)
+    g[id] = $0
+    next
+}
+
+FNR == 1 {
+    tmp = h
+    sub(/^ID\t?/, "", tmp)
+    print $0, tmp
+    next
+}
+
+{ print $0, ($3 in g ? g[$3] : "") }
