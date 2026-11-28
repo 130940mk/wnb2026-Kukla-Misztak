@@ -1,1 +1,6 @@
 duzy.dat
+
+# dane wejściowe i wyjściowe
+*.tsv
+*.fa
+*.csv
